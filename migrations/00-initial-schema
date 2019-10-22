@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -euo pipefail
+
+: ${MYSQL_ROOT_PASSWORD:?Define this please}
+
+mysql --default-character-set=utf8mb4 -u root "-p$MYSQL_ROOT_PASSWORD" < data/00-initial-schema 
+
+cat <(echo 'SET NAMES utf8mb4; INSERT INTO source (name) VALUES ') \
+    <( find data -type f -name '00-initial-sources*' -exec cat {} ';' \
+           | sed 's/.*/('\''&'\'')/' \
+           | paste -sd ",") \
+    <(echo ' ON DUPLICATE KEY UPDATE name=name;') \
+    | mysql --default-character-set=utf8mb4 -u root "-p$MYSQL_ROOT_PASSWORD" orihime
+
+
+

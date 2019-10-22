@@ -1,0 +1,72 @@
+OPTIONS
+GET
+HEAD
+POST
+PUT
+DELETE
+TRACE
+CONNECT
+
+https://dev.mysql.com/doc/refman/5.7/en/c-api-prepared-statements.html
+
+Pagination can be done in SQL with `LIMIT 10,20`
+
+/sources
+HEAD GET POST
+SELECT * FROM sources;
+
+/sources/<id>
+HEAD GET
+# This could be a ROW_ID or the name of the source, once created only editable server-side
+SELECT * FROM source WHERE id = ?;
+
+/texts
+HEAD GET
+# Can only post from /users/
+SELECT * FROM text;
+
+/texts/<id>
+HEAD GET 
+SELECT * FROM text WHERE id = ?;
+
+/words
+HEAD GET
+SELECT * FROM words;
+
+/words/<id>
+HEAD GET
+# This could be a ROW_ID or the word, but how to resolve ambiguity for words?
+SELECT * FROM words WHERE id = ?;
+
+/users
+HEAD GET 
+SELECT * FROM users;
+
+/users/<id>
+HEAD GET
+# This could be a ROW_ID or a name, names are unique
+SELECT * FROM users WHERE id = ?;
+
+/users/<id>/texts
+HEAD GET POST
+SELECT * FROM texts
+INNER JOIN users ON texts.user_id = users.id
+WHERE users.id = ?;
+
+/user/<id>/texts/<id>
+HEAD GET PUT DELETE
+SELECT * FROM texts
+INNER JOIN users ON texts.user_id = users.id
+WHERE users.id = ? AND texts.id = ?;
+
+/user/<id>/words
+HEAD GET POST
+SELECT * FROM words
+INNER JOIN users ON words.user_id = users.id
+WHERE users.id = ?;
+
+/user/<id>/words/<id> 
+HEAD GET PUT DELETE
+SELECT * FROM words
+INNER JOIN users ON words.user_id = users.id
+WHERE users.id = ? AND words.id = ?;
