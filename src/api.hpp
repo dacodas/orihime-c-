@@ -50,6 +50,41 @@ void serialize_sources(std::unique_ptr<sql::ResultSet> result)
     document.Accept(writer);
 }
 
+void serialize_object(std::unique_ptr<sql::ResultSet> result, const std::vector<std::string>& fields)
+{
+    rapidjson::Document document {};
+    document.SetArray();
+
+    rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
+
+    while ( result->next() )
+    {
+        for ( const auto& field : fields )
+        {
+            sql::SQLString string {result->getString(field)};
+
+            rapidjson::Value field_value;
+            field_value.SetString(string.c_str(), string.asStdString().size(), allocator);
+
+            rapidjson::Value().SetString(string.c_str(), string.asStdString().size(), allocator);
+
+            rapidjson::Value object;
+            object
+                .SetObject()
+                .AddMember(
+                    rapidjson::Value().SetString(rapidjson::GenericStringRef {field.c_str()}),
+                    field_value, document.GetAllocator());
+
+            document.PushBack(object.Move(), allocator);
+        }
+    }
+
+    rapidjson::OStreamWrapper wrapper {std::cout};
+    rapidjson::Writer<rapidjson::OStreamWrapper> writer {wrapper};
+    document.Accept(writer);
+}
+
+
 void sources_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters)
 {
     std::unique_ptr<sql::Statement> statement {connection->createStatement()};
@@ -81,6 +116,12 @@ void sources_POST(OrihimeRequest&& request, const std::vector<std::string>& para
     try
     {
         statement->execute();
+
+        // Now find and return the result for the user? Let's learn
+        // more about the result of execute()
+        // sources_id_GET(std::move(request), parameters);
+
+        std::cout << "Success\n";
     }
     catch (const std::exception& exception)
     {
@@ -98,46 +139,33 @@ void sources_id_GET(OrihimeRequest&& request, const std::vector<std::string>& pa
     serialize_sources(std::move(result));
 }
 
+void okay()
+{
+    std::unique_ptr<sql::Statement> statement {connection->createStatement()};
+    ;
+}
+
 void sources_id_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
 void texts_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters) 
 {
     std::unique_ptr<sql::Statement> statement {connection->createStatement()};
-    std::unique_ptr<sql::ResultSet> result {statement->executeQuery("SELECT * FROM text")};
+    
+    std::vector<std::string> fields {"user", "source", "contents"};
+    // std::unique_ptr<sql::ResultSet> result {statement->executeQuery("SELECT * FROM text")};
 
-    std::vector<std::string> fields {"id", "user", "source", "contents"};
+    std::unique_ptr<sql::ResultSet> result {
+        statement->executeQuery(
+            R"sql(
+SELECT user.name     AS user,
+       source.name   AS source,
+       text.contents AS contents
+FROM text
+INNER JOIN source ON source.id = text.source
+INNER JOIN user ON user.id = text.user;
+)sql")};
 
-    {
-        rapidjson::Document document {};
-        document.SetArray();
-
-        rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
-
-        while ( result->next() )
-        {
-            for ( const auto& field : fields )
-            {
-                sql::SQLString string {result->getString(field)};
-
-                rapidjson::Value field_value;
-                field_value.SetString(string.c_str(), string.asStdString().size(), allocator);
-
-                rapidjson::Value().SetString(string.c_str(), string.asStdString().size(), allocator);
-
-                rapidjson::Value object;
-                object
-                    .SetObject()
-                    .AddMember(
-                        rapidjson::Value().SetString(rapidjson::GenericStringRef {field.c_str()}),
-                        field_value, document.GetAllocator());
-
-                document.PushBack(object.Move(), allocator);
-            }
-        }
-
-        rapidjson::OStreamWrapper wrapper {std::cout};
-        rapidjson::Writer<rapidjson::OStreamWrapper> writer {wrapper};
-        document.Accept(writer);
-    }
+    serialize_object(std::move(result), fields);
+    
 }
 
 void texts_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
