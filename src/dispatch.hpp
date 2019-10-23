@@ -17,6 +17,14 @@ using Dispatch = std::pair<std::regex, HTTPMethodToSQLQueryFunction>;
 // using DispatchTable = std::vector<Dispatch>;
 
 // Why am I doing this, I thought this is what Apache was for?
+// 
+// EDIT: YES INDEED, see TODO below
+//
+// TODO: Get all the parameters via Apache mod_env and redirect to
+// KNOWN API endpoints without regex using mod_rewrite, then we can
+// get rid of this charade
+
+
 // using DispatchFunction = std::pair<std::regex, DispatchFunctions>;
 // static std::vector<DispatchFunction> DispatchTable;
 
@@ -84,7 +92,7 @@ void dispatch(OrihimeRequest&& request)
     std::string path {request.parameter("REQUEST_URI")};
     std::string method {request.parameter("REQUEST_METHOD")};
 
-    std::cout << path << "\n" << method << "\n";
+    std::cerr << path << "\n" << method << "\n";
 
     for ( const Dispatch& dispatch : DispatchTable )
     {
@@ -100,7 +108,8 @@ void dispatch(OrihimeRequest&& request)
 
             if ( result != method_to_function.end() )
             {
-                std::vector<std::string> parameters(match.size());
+                std::vector<std::string> parameters;
+                parameters.reserve(match.size());
                 for ( size_t i = 1; i < match.size(); ++i )
                 {
                     parameters.emplace_back(std::move(match[i]));
