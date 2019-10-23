@@ -1,3 +1,5 @@
+#pragma once 
+
 #include <vector>
 #include <string>
 #include <regex>
@@ -5,10 +7,11 @@
 
 #include <fcgio.h>
 
+#include "OrihimeRequest.hpp"
 #include "api.hpp"
 
 using Parameters = std::vector<std::string>;
-using SQLQueryFunction = std::function<void(const std::vector<std::string>&)>;
+using SQLQueryFunction = std::function<void(OrihimeRequest&&, const std::vector<std::string>&)>;
 using HTTPMethodToSQLQueryFunction = std::vector<std::pair<std::string, SQLQueryFunction>>;
 using Dispatch = std::pair<std::regex, HTTPMethodToSQLQueryFunction>;
 // using DispatchTable = std::vector<Dispatch>;
@@ -75,7 +78,37 @@ static std::vector<Dispatch> DispatchTable
             })
     };
 
-void dispatch(FCGX_Request&& request)
+void dispatch(OrihimeRequest&& request)
 {
+    std::smatch match;
+    std::string path {request.parameter("REQUEST_URI")};
+    std::string method {request.parameter("REQUEST_METHOD")};
 
+    std::cout << path << "\n" << method << "\n";
+
+    for ( const Dispatch& dispatch : DispatchTable )
+    {
+        auto& [regex, method_to_function] = dispatch;
+
+        if ( std::regex_match(path, match, regex) )
+        {
+            auto result = std::find_if(
+                method_to_function.begin(),
+                method_to_function.end(),
+                [&] (const std::pair<std::string, SQLQueryFunction>& a) { return a.first == method; }
+                );
+
+            if ( result != method_to_function.end() )
+            {
+                std::vector<std::string> parameters(match.size());
+                for ( size_t i = 1; i < match.size(); ++i )
+                {
+                    parameters.emplace_back(std::move(match[i]));
+                }
+                result->second(std::move(request), parameters);
+            }
+
+            break;
+        }
+    }
 }
