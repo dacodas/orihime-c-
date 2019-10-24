@@ -71,6 +71,7 @@ static std::vector<Dispatch> DispatchTable
                 {"GET", users_id_texts_id_GET},
                 {"HEAD", users_id_texts_id_HEAD},
                 {"PUT", users_id_texts_id_PUT}
+                {"POST", users_id_texts_id_POST}
             }),
 
         Dispatch("/users/(.*?)/words/", {

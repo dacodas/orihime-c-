@@ -194,16 +194,68 @@ INNER JOIN source ON source.name = ?
 WHERE user.name = ?;
 )sql")};
 
-    rapidjson::Document Document {parse_body(request)};
+    rapidjson::Document document {parse_body(request)};
 
-    // rowsCount();
-    // rowInserted();
-    // rowDeleted();
-    // rowUpdated();
+    if ( not document.IsObject() )
+    {
+        rerr << "Please send a JSON object";
+        return;
+    }
+
+    statement->setString(1, document["contents"].GetString());
+    statement->setString(2, document["source"].GetString());
+    statement->setString(3, request.parameter("USER"));
+    std::unique_ptr<sql::ResultSet> result {statement->executeQuery()};
+
+    rout << document["contents"].GetString();
+    rout << document["source"].GetString();
+    rout << request.parameter("USER");
+
+    // rout << "Rows: " << result->rowsCount() << "\n";
+    // rout << "Inserted: " << result->rowInserted() << "\n";
+    // rout << "Deleted: " << result->rowDeleted() << "\n";
+    // rout << "Updated: " << result->rowUpdated() << "\n";
+    // sql::ResultSetMetaData*& metadata = result->getMetaData();
 }
 void users_id_texts_id_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
 void users_id_texts_id_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
 void users_id_texts_id_PUT(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
+void users_id_texts_id_POST(OrihimeRequest&& request, const std::vector<std::string>& parameters)
+{
+    std::unique_ptr<sql::PreparedStatement> statement {connection->prepareStatement(
+            R"sql(
+INSERT INTO text (user, source, contents)
+SELECT user.id, source.id, ?
+FROM user 
+INNER JOIN source ON source.name = ?
+WHERE user.name = ?;
+
+INSERT INTO word (user, word, definition)
+SELECT user.id, ?, LAST_INSERT_ID()
+FROM user 
+WHERE user.name = ?;
+
+INSERT INTO word_relation (text, word)
+SELECT ?, LAST_INSERT_ID();
+)sql")};
+
+    rapidjson::Document document {parse_body(request)};
+
+    if ( not document.IsObject() )
+    {
+        rerr << "Please send a JSON object";
+        return;
+    }
+
+    statement->setString(1, document["contents"].GetString());
+    statement->setString(2, document["source"].GetString());
+    statement->setString(3, request.parameter("USER"));
+    statement->setString(2, document["word"].GetString());
+    statement->setString(3, request.parameter("USER"));
+    statement->setString(3, request.parameter("TEXT"));
+    std::unique_ptr<sql::ResultSet> result {statement->executeQuery()};
+
+}
 void users_id_words_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
 void users_id_words_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
 void users_id_words_POST(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
