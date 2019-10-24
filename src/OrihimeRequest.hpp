@@ -33,7 +33,7 @@ public:
             rerr.rdbuf(&rerr_streambuf);
         };
 
-    std::string parameter(const std::string& parameter)
+    std::string parameter(const std::string& parameter) const
         {
             char* parameter_c = FCGX_GetParam(parameter.c_str(), envp);
             return parameter_c ? parameter_c : "";

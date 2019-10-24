@@ -25,6 +25,18 @@
 //
 // NEVER JOIN HERE ALWAYS JOIN IN SQL THIS SHOULD ONLY BE SIMPLE SERIALIZATION
 
+rapidjson::Document parse_body(const OrihimeRequest& request)
+{ 
+    rapidjson::Document document;
+    int content_length {std::stoi(request.parameter("CONTENT_LENGTH"))};
+
+    std::string document_string(content_length, ' ');
+    rin.read(document_string.data(), content_length);
+    document.Parse(document_string.c_str());
+
+    return document;
+}
+
 void serialize_sources(std::unique_ptr<sql::ResultSet> result)
 {
     rapidjson::Document document {};
@@ -59,6 +71,9 @@ void serialize_object(std::unique_ptr<sql::ResultSet> result, const std::vector<
 
     while ( result->next() )
     {
+        rapidjson::Value object;
+        object.SetObject();
+
         for ( const auto& field : fields )
         {
             sql::SQLString string {result->getString(field)};
@@ -68,15 +83,12 @@ void serialize_object(std::unique_ptr<sql::ResultSet> result, const std::vector<
 
             rapidjson::Value().SetString(string.c_str(), string.asStdString().size(), allocator);
 
-            rapidjson::Value object;
-            object
-                .SetObject()
-                .AddMember(
+            object.AddMember(
                     rapidjson::Value().SetString(rapidjson::GenericStringRef {field.c_str()}),
                     field_value, document.GetAllocator());
-
-            document.PushBack(object.Move(), allocator);
         }
+
+        document.PushBack(object.Move(), allocator);
     }
 
     rapidjson::OStreamWrapper wrapper {std::cout};
@@ -97,12 +109,7 @@ void sources_POST(OrihimeRequest&& request, const std::vector<std::string>& para
 {
     std::unique_ptr<sql::PreparedStatement> statement {connection->prepareStatement("INSERT INTO source (name) VALUES (?)")};
 
-    rapidjson::Document document;
-    int content_length {std::stoi(request.parameter("CONTENT_LENGTH"))};
-
-    std::string document_string(content_length, ' ');
-    rin.read(document_string.data(), content_length);
-    document.Parse(document_string.c_str());
+    rapidjson::Document document {parse_body(request)};
 
     if ( not document.IsString() )
     {
@@ -165,7 +172,6 @@ INNER JOIN user ON user.id = text.user;
 )sql")};
 
     serialize_object(std::move(result), fields);
-    
 }
 
 void texts_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
@@ -177,7 +183,24 @@ void words_id_GET(OrihimeRequest&& request, const std::vector<std::string>& para
 void words_id_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
 void users_id_texts_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
 void users_id_texts_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void users_id_texts_POST(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
+void users_id_texts_POST(OrihimeRequest&& request, const std::vector<std::string>& parameters)
+{
+    std::unique_ptr<sql::PreparedStatement> statement {connection->prepareStatement(
+            R"sql(
+INSERT INTO text (user, source, contents)
+SELECT user.id, source.id, ?
+FROM user 
+INNER JOIN source ON source.name = ?
+WHERE user.name = ?;
+)sql")};
+
+    rapidjson::Document Document {parse_body(request)};
+
+    // rowsCount();
+    // rowInserted();
+    // rowDeleted();
+    // rowUpdated();
+}
 void users_id_texts_id_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
 void users_id_texts_id_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
 void users_id_texts_id_PUT(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
