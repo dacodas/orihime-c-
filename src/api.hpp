@@ -1,5 +1,7 @@
 #include <string>
 #include <vector>
+#include <queue>
+#include <tuple>
 
 #include <fcgiapp.h>
 
@@ -25,13 +27,19 @@
 //
 // NEVER JOIN HERE ALWAYS JOIN IN SQL THIS SHOULD ONLY BE SIMPLE SERIALIZATION
 
+std::string body_to_string(const OrihimeRequest& request)
+{
+    int content_length {std::stoi(request.parameter("CONTENT_LENGTH"))};
+    std::string document_string(content_length, ' ');
+    rin.read(document_string.data(), content_length);
+
+    return document_string;
+}
+
 rapidjson::Document parse_body(const OrihimeRequest& request)
 { 
     rapidjson::Document document;
-    int content_length {std::stoi(request.parameter("CONTENT_LENGTH"))};
-
-    std::string document_string(content_length, ' ');
-    rin.read(document_string.data(), content_length);
+    std::string document_string = body_to_string(request);
     document.Parse(document_string.c_str());
 
     return document;
@@ -187,71 +195,116 @@ void users_id_texts_POST(OrihimeRequest&& request, const std::vector<std::string
 {
     std::unique_ptr<sql::PreparedStatement> statement {connection->prepareStatement(
             R"sql(
-INSERT INTO text (user, source, contents)
-SELECT user.id, source.id, ?
-FROM user 
-INNER JOIN source ON source.name = ?
-WHERE user.name = ?;
+CALL add_text(?)
 )sql")};
 
-    rapidjson::Document document {parse_body(request)};
+    statement->setString(1, body_to_string(request));
+    std::unique_ptr<sql::ResultSet> result {statement->executeQuery()};
+}
+void users_id_texts_id_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters)
+{
+    std::unique_ptr<sql::PreparedStatement> statement {connection->prepareStatement(
+            R"sql(
+CALL orihime.TextTreeJSON(?, ?);
+)sql")};
 
-    if ( not document.IsObject() )
-    {
-        rerr << "Please send a JSON object";
-        return;
-    }
-
-    statement->setString(1, document["contents"].GetString());
-    statement->setString(2, document["source"].GetString());
-    statement->setString(3, request.parameter("USER"));
+    statement->setString(1, request.parameter("USER"));
+    statement->setString(2, request.parameter("TEXT"));
     std::unique_ptr<sql::ResultSet> result {statement->executeQuery()};
 
-    rout << document["contents"].GetString();
-    rout << document["source"].GetString();
-    rout << request.parameter("USER");
+    // A regular pointer, we are modifying this value, but ownership
+    // is clearly defined by the document and it remains in scope this
+    // entire time
+    //
+    // Consider using std::array<int, 32>
+    rapidjson::Document root_text;
 
-    // rout << "Rows: " << result->rowsCount() << "\n";
-    // rout << "Inserted: " << result->rowInserted() << "\n";
-    // rout << "Deleted: " << result->rowDeleted() << "\n";
-    // rout << "Updated: " << result->rowUpdated() << "\n";
-    // sql::ResultSetMetaData*& metadata = result->getMetaData();
-}
-void users_id_texts_id_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
+    using HashToObject = std::pair<std::string, rapidjson::Value*>;
+    std::vector<HashToObject> current_text_locations;
+    {
+        result->next();
+        sql::SQLString root_hash = result->getString("hash");
+        sql::SQLString root_text_json = result->getString("children");
+
+        if ( strcmp(root_hash.c_str(), "00000000000000000000000000000000") )
+            throw std::logic_error("The hash of the root text returned from SQL is expected to be all zeros");
+
+        root_text.Parse(root_text_json.c_str());
+
+        if ( not root_text.IsObject()
+             or not root_text.GetObject().HasMember("id")
+             or not root_text.GetObject().HasMember("contents")
+             or not root_text.GetObject().HasMember("source")
+             or not root_text.GetObject()["id"].IsString() )
+            throw std::logic_error("");
+
+        current_text_locations.emplace_back(HashToObject {root_text.GetObject()["id"].GetString(), &root_text});
+    }
+
+    using ParentHashAndChildren = std::pair<std::string, rapidjson::Document>;
+    std::queue<ParentHashAndChildren> children_to_insert {};
+    while ( result->next() )
+    {
+        rapidjson::Document children(&root_text.GetAllocator());
+        sql::SQLString parent_hash = result->getString("hash");
+        sql::SQLString children_json = result->getString("children");
+
+        children.Parse(children_json.c_str());
+        if ( not children.IsArray() )
+            throw std::logic_error("");
+
+        children_to_insert.emplace(ParentHashAndChildren {std::string(parent_hash.c_str()), std::move(children)});
+    }
+
+    while ( not children_to_insert.empty() )
+    {
+        ParentHashAndChildren current = std::move(children_to_insert.front());
+
+        auto& [parent_hash, children] = current;
+
+        std::vector<HashToObject>::iterator result =
+            std::find_if(
+                current_text_locations.begin(),
+                current_text_locations.end(),
+                [&](const HashToObject& a) { return a.first == parent_hash; }
+                );
+
+        if ( result == current_text_locations.end() )
+        {
+            children_to_insert.emplace(std::move(current));
+        }
+        else
+        {
+            result->second->AddMember("children", children, root_text.GetAllocator());
+            rapidjson::Value& children_array = (*result->second)["children"];
+
+            for ( rapidjson::Value::ValueIterator it = children_array.Begin() ;
+                  it != children_array.End() ;
+                  ++it )
+            {
+                current_text_locations.emplace_back(HashToObject {it->GetObject()["id"].GetString(), &(*it)});
+            }
+        }
+
+        children_to_insert.pop();
+    }
+
+    rapidjson::OStreamWrapper wrapper {std::cout};
+    rapidjson::Writer<rapidjson::OStreamWrapper> writer {wrapper};
+    root_text.Accept(writer);
+} 
+
 void users_id_texts_id_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
 void users_id_texts_id_PUT(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
 void users_id_texts_id_POST(OrihimeRequest&& request, const std::vector<std::string>& parameters)
 {
     std::unique_ptr<sql::PreparedStatement> statement {connection->prepareStatement(
             R"sql(
-INSERT INTO text (user, source, contents)
-SELECT user.id, source.id, ?
-FROM user 
-INNER JOIN source ON source.name = ?
-WHERE user.name = ?;
-
-INSERT INTO word (user, word, definition)
-SELECT user.id, ?, LAST_INSERT_ID()
-FROM user 
-WHERE user.name = ?;
-
-INSERT INTO word_relation (text, word)
-SELECT ?, LAST_INSERT_ID();
+CALL orihime.add_child_word(?, ?, ?);
 )sql")};
 
-    rapidjson::Document document {parse_body(request)};
-
-    if ( not document.IsObject() )
-    {
-        rerr << "Please send a JSON object";
-        return;
-    }
-
-    statement->setString(1, document["contents"].GetString());
-    statement->setString(2, document["source"].GetString());
-    statement->setString(3, request.parameter("USER"));
-    statement->setString(2, document["word"].GetString());
-    statement->setString(3, request.parameter("USER"));
+    statement->setString(1, body_to_string(request));
+    statement->setString(2, request.parameter("USER"));
     statement->setString(3, request.parameter("TEXT"));
     std::unique_ptr<sql::ResultSet> result {statement->executeQuery()};
 
