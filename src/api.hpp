@@ -11,6 +11,7 @@
 #include <rapidjson/writer.h>
 
 #include "sql.hpp"
+#include "sanitize.h"
 
 // Let's consider how to serialize these. For now the modus operandi will be. 
 // 
@@ -201,7 +202,162 @@ CALL add_text(?)
     statement->setString(1, body_to_string(request));
     std::unique_ptr<sql::ResultSet> result {statement->executeQuery()};
 }
+
+// Exchange contents for better memory usage
+// https://en.cppreference.com/w/cpp/string/basic_string/data
+// CharT* data() noexcept; since C++17
+// xmlSetProp(root_div, "id", std::exchange(hash.data(), nullptr));
+
+xmlNodePtr root_text_from_sql(std::shared_ptr<sql::ResultSet> result)
+{
+    sql::SQLString id = result->getString("id");
+    sql::SQLString word = result->getString("word");
+    sql::SQLString contents = result->getString("definition");
+    sql::SQLString source = result->getString("source");
+
+    xmlNodePtr word_div = xmlNewNode(nullptr, (const xmlChar*) "div");
+    xmlNewProp(word_div, (const xmlChar*) "class", (const xmlChar*) "orihime-text");
+    xmlNewProp(word_div, (const xmlChar*) "id", (const xmlChar*) id.c_str());
+    xmlNodePtr contents_div = xmlNewChild(word_div, nullptr, (const xmlChar*) "div", nullptr);
+    xmlNewProp(contents_div, (const xmlChar*) "class", (const xmlChar*) "orihime-contents");
+    xmlNodePtr source_div = xmlNewChild(word_div, nullptr, (const xmlChar*) "div", (const xmlChar*) source.c_str());
+    xmlNewProp(source_div, (const xmlChar*) "class", (const xmlChar*) "orihime-source");
+
+    htmlDocPtr contents_document =
+        htmlReadDoc((const xmlChar*) contents.c_str(),
+                    nullptr, "utf-8",
+                    HTML_PARSE_NODEFDTD | HTML_PARSE_NONET | HTML_PARSE_NOIMPLIED);
+
+    int indent = 0;
+    xmlNodePtr contents_root = xmlDocGetRootElement(contents_document);
+    filter(contents_root, indent);
+
+    xmlUnlinkNode(contents_root);
+    xmlAddChild(contents_div, contents_root);
+    xmlFreeDoc(contents_document);
+
+    return word_div;
+}
+
+xmlNodePtr child_word_from_sql(std::shared_ptr<sql::ResultSet> result)
+{
+    sql::SQLString id = result->getString("id");
+    sql::SQLString word = result->getString("word");
+    sql::SQLString definition = result->getString("definition");
+    sql::SQLString source = result->getString("source");
+
+    xmlNodePtr word_div = xmlNewNode(nullptr, (const xmlChar*) "div");
+    xmlNewProp(word_div, (const xmlChar*) "class", (const xmlChar*) "orihime-word");
+    xmlNewProp(word_div, (const xmlChar*) "id", (const xmlChar*) id.c_str());
+    xmlNodePtr reading_div = xmlNewChild(word_div, nullptr, (const xmlChar*) "div", (const xmlChar*) word.c_str());
+    xmlNewProp(reading_div, (const xmlChar*) "class", (const xmlChar*) "orihime-reading");
+    xmlNodePtr definition_div = xmlNewChild(word_div, nullptr, (const xmlChar*) "div", nullptr);
+    xmlNewProp(definition_div, (const xmlChar*) "class", (const xmlChar*) "orihime-definition");
+    xmlNodePtr source_div = xmlNewChild(word_div, nullptr, (const xmlChar*) "div", (const xmlChar*) source.c_str());
+    xmlNewProp(source_div, (const xmlChar*) "class", (const xmlChar*) "orihime-source");
+
+    htmlDocPtr definition_document =
+        htmlReadDoc((const xmlChar*) definition.c_str(),
+                    nullptr, "utf-8",
+                    HTML_PARSE_NODEFDTD | HTML_PARSE_NONET | HTML_PARSE_NOIMPLIED);
+
+    int indent = 0;
+    xmlNodePtr definition_root = xmlDocGetRootElement(definition_document);
+    filter(definition_root, indent);
+
+    xmlUnlinkNode(definition_root);
+    xmlAddChild(definition_div, definition_root);
+    xmlFreeDoc(definition_document);
+
+    return word_div;
+}
+
+void insert_as_child(xmlNodePtr parent, xmlNodePtr child)
+{
+    if ( strcmp((const char*) xmlGetProp(parent->last, (const xmlChar*) "class"), "orihime-children") == 0 )
+    {
+        xmlAddChild(parent->last, child);
+    }
+    else
+    {
+        xmlNodePtr children_node = xmlNewNode(nullptr, (const xmlChar*) "div");
+        xmlNewProp(children_node, (const xmlChar*) "class", (const xmlChar*) "orihime-children");
+        xmlAddChild(children_node, child);
+        xmlAddChild(parent, children_node);
+    }
+}
+
+// TODO: Abstract and consolidate the HTML and JSON versions of this function 
+// void users_id_texts_id_GET_HTML(OrihimeRequest&& request, const std::vector<std::string>& parameters)
 void users_id_texts_id_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters)
+{
+    std::unique_ptr<sql::PreparedStatement> statement {connection->prepareStatement(
+            R"sql(
+CALL orihime.TextTree(?, ?);
+)sql")};
+
+    statement->setString(1, request.parameter("USER"));
+    statement->setString(2, request.parameter("TEXT"));
+    std::shared_ptr<sql::ResultSet> result {statement->executeQuery()};
+
+    using HashToNode = std::pair<std::string, xmlNodePtr>;
+    using ParentHashAndNode = std::pair<std::string, xmlNodePtr>;
+
+    std::vector<HashToNode> current_text_locations;
+    std::queue<ParentHashAndNode> children_to_insert {};
+
+    htmlDocPtr orihime_text_document = htmlNewDocNoDtD(nullptr, nullptr);
+
+    while ( result->next() )
+    {
+        sql::SQLString hash = result->getString("hash");
+
+        if ( strcmp(hash.c_str(), "00000000000000000000000000000000") == 0 )
+        {
+            xmlNodePtr root_element = root_text_from_sql(result);
+            xmlDocSetRootElement(orihime_text_document, root_element);
+            current_text_locations.emplace_back(HashToNode {result->getString("id").c_str(), root_element});
+        }
+        else
+        {
+            children_to_insert.emplace(ParentHashAndNode {std::string(hash.c_str()), child_word_from_sql(result)});
+        }
+    }
+
+    while ( not children_to_insert.empty() )
+    {
+        ParentHashAndNode current = std::move(children_to_insert.front());
+
+        auto& [parent_hash, child] = current;
+
+        std::vector<HashToNode>::iterator result =
+            std::find_if(
+                current_text_locations.begin(),
+                current_text_locations.end(),
+                [&](const HashToNode & a) { return a.first == parent_hash; }
+                );
+
+        if ( result == current_text_locations.end() )
+        {
+            children_to_insert.emplace(std::move(current));
+        }
+        else
+        {
+            insert_as_child(result->second, child);
+            current_text_locations.emplace_back(
+                HashToNode {
+                    (const char*) xmlGetProp(child, (const xmlChar*) "id"), child
+                });
+        }
+
+        children_to_insert.pop();
+    }
+
+    htmlDocDump(stdout, orihime_text_document);
+    xmlFreeDoc(orihime_text_document);
+}
+
+void users_id_texts_id_GET_JSON(OrihimeRequest&& request, const std::vector<std::string>& parameters)
 {
     std::unique_ptr<sql::PreparedStatement> statement {connection->prepareStatement(
             R"sql(
