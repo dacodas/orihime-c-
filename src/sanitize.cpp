@@ -346,9 +346,3 @@ void test1()
 
     xmlFreeDoc(document);
 }
-
-// int main()
-// {
-//     test2();
-//     return 0;
-// }

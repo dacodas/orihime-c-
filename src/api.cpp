@@ -1,17 +1,18 @@
-#include <string>
-#include <vector>
 #include <queue>
 #include <tuple>
 
+#include <curl/curl.h>
 #include <fcgiapp.h>
 
+// http://rapidjson.org/md_doc_tutorial.html
 #include <rapidjson/document.h>
 #include <rapidjson/istreamwrapper.h>
 #include <rapidjson/ostreamwrapper.h>
 #include <rapidjson/writer.h>
 
-#include "sql.hpp"
+#include "sql.h"
 #include "sanitize.h"
+#include "OrihimeRequest.h"
 
 // Let's consider how to serialize these. For now the modus operandi will be. 
 // 
@@ -32,7 +33,7 @@ std::string body_to_string(const OrihimeRequest& request)
 {
     int content_length {std::stoi(request.parameter("CONTENT_LENGTH"))};
     std::string document_string(content_length, ' ');
-    rin.read(document_string.data(), content_length);
+    std::cin.read(document_string.data(), content_length);
 
     return document_string;
 }
@@ -46,7 +47,7 @@ rapidjson::Document parse_body(const OrihimeRequest& request)
     return document;
 }
 
-void serialize_sources(std::unique_ptr<sql::ResultSet> result)
+void serialize_sources(std::unique_ptr<sql::ResultSet> result, std::ostream& stream)
 {
     rapidjson::Document document {};
     document.SetArray();
@@ -66,12 +67,12 @@ void serialize_sources(std::unique_ptr<sql::ResultSet> result)
         document.PushBack(object.Move(), allocator);
     }
 
-    rapidjson::OStreamWrapper wrapper {std::cout};
-    rapidjson::Writer<rapidjson::OStreamWrapper> writer {wrapper};
+    rapidjson::OStreamWrapper stream_wrapper(stream);
+    rapidjson::Writer<rapidjson::OStreamWrapper> writer {stream_wrapper};
     document.Accept(writer);
 }
 
-void serialize_object(std::unique_ptr<sql::ResultSet> result, const std::vector<std::string>& fields)
+void serialize_object(std::unique_ptr<sql::ResultSet> result, const std::vector<std::string>& fields, std::ostream& output)
 {
     rapidjson::Document document {};
     document.SetArray();
@@ -100,21 +101,20 @@ void serialize_object(std::unique_ptr<sql::ResultSet> result, const std::vector<
         document.PushBack(object.Move(), allocator);
     }
 
-    rapidjson::OStreamWrapper wrapper {std::cout};
+    rapidjson::OStreamWrapper wrapper {output};
     rapidjson::Writer<rapidjson::OStreamWrapper> writer {wrapper};
     document.Accept(writer);
 }
 
-
-void sources_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters)
+void sources_GET(OrihimeRequest& request)
 {
     std::unique_ptr<sql::Statement> statement {connection->createStatement()};
     std::unique_ptr<sql::ResultSet> result {statement->executeQuery("SELECT * FROM source")};
-    serialize_sources(std::move(result));
+    serialize_sources(std::move(result), *request.rout);
 }
 
-void sources_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void sources_POST(OrihimeRequest&& request, const std::vector<std::string>& parameters)
+void sources_HEAD(OrihimeRequest& request) {} 
+void sources_POST(OrihimeRequest& request)
 {
     std::unique_ptr<sql::PreparedStatement> statement {connection->prepareStatement("INSERT INTO source (name) VALUES (?)")};
 
@@ -122,7 +122,7 @@ void sources_POST(OrihimeRequest&& request, const std::vector<std::string>& para
 
     if ( not document.IsString() )
     {
-        rerr << "That is not a JSON string\n";
+        *request.rerr << "That is not a JSON string\n";
         return;
     }
 
@@ -137,62 +137,53 @@ void sources_POST(OrihimeRequest&& request, const std::vector<std::string>& para
         // more about the result of execute()
         // sources_id_GET(std::move(request), parameters);
 
-        std::cout << "Success\n";
+        *request.rout << "Success\n";
     }
     catch (const std::exception& exception)
     {
-        std::cout << "Failure\n";
-        std::cerr << exception.what();
+        *request.rout << "Failure\n";
+        *request.rerr << exception.what();
     }
 }
 
-void sources_id_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters)
+void sources_id_GET(OrihimeRequest& request)
 {
     std::unique_ptr<sql::PreparedStatement> statement {connection->prepareStatement("SELECT * FROM source WHERE id = ?")};
-    statement->setString(1, parameters[0]);
+    statement->setString(1, request.parameter("SOURCE"));
 
     std::unique_ptr<sql::ResultSet> result {statement->executeQuery()};
-    serialize_sources(std::move(result));
+    serialize_sources(std::move(result), *request.rout);
 }
 
-void okay()
-{
-    std::unique_ptr<sql::Statement> statement {connection->createStatement()};
-    ;
-}
-
-void sources_id_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void texts_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters) 
+void sources_id_HEAD(OrihimeRequest& request) {} 
+void texts_GET(OrihimeRequest& request) 
 {
     std::unique_ptr<sql::Statement> statement {connection->createStatement()};
     
-    std::vector<std::string> fields {"user", "source", "contents"};
-    // std::unique_ptr<sql::ResultSet> result {statement->executeQuery("SELECT * FROM text")};
+    std::vector<std::string> fields {"source", "contents"};
 
     std::unique_ptr<sql::ResultSet> result {
         statement->executeQuery(
             R"sql(
-SELECT user.name     AS user,
-       source.name   AS source,
+SELECT source.name   AS source,
        text.contents AS contents
 FROM text
-INNER JOIN source ON source.id = text.source
-INNER JOIN user ON user.id = text.user;
+INNER JOIN source ON source.id = text.source;
 )sql")};
 
-    serialize_object(std::move(result), fields);
+    serialize_object(std::move(result), fields, *request.rout);
 }
 
-void texts_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void texts_id_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void texts_id_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void words_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void words_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void words_id_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void words_id_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void users_id_texts_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void users_id_texts_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void users_id_texts_POST(OrihimeRequest&& request, const std::vector<std::string>& parameters)
+void texts_HEAD(OrihimeRequest& request) {} 
+void texts_id_GET(OrihimeRequest& request) {} 
+void texts_id_HEAD(OrihimeRequest& request) {} 
+void words_GET(OrihimeRequest& request) {} 
+void words_HEAD(OrihimeRequest& request) {} 
+void words_id_GET(OrihimeRequest& request) {} 
+void words_id_HEAD(OrihimeRequest& request) {} 
+void users_id_texts_GET(OrihimeRequest& request) {} 
+void users_id_texts_HEAD(OrihimeRequest& request) {} 
+void users_id_texts_POST(OrihimeRequest& request)
 {
     std::unique_ptr<sql::PreparedStatement> statement {connection->prepareStatement(
             R"sql(
@@ -288,8 +279,8 @@ void insert_as_child(xmlNodePtr parent, xmlNodePtr child)
 }
 
 // TODO: Abstract and consolidate the HTML and JSON versions of this function 
-// void users_id_texts_id_GET_HTML(OrihimeRequest&& request, const std::vector<std::string>& parameters)
-void users_id_texts_id_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters)
+// void users_id_texts_id_GET_HTML(OrihimeRequest& request)
+void users_id_texts_id_GET(OrihimeRequest& request)
 {
     std::unique_ptr<sql::PreparedStatement> statement {connection->prepareStatement(
             R"sql(
@@ -324,6 +315,9 @@ CALL orihime.TextTree(?, ?);
         }
     }
 
+    // https://dev.mysql.com/doc/connector-cpp/1.1/en/connector-cpp-tutorials-stored-routines-statement-with-result.html
+    while ( statement->getMoreResults() ) {}
+
     while ( not children_to_insert.empty() )
     {
         ParentHashAndNode current = std::move(children_to_insert.front());
@@ -353,11 +347,16 @@ CALL orihime.TextTree(?, ?);
         children_to_insert.pop();
     }
 
-    htmlDocDump(stdout, orihime_text_document);
+    xmlChar* output;
+    int size;
+    htmlDocDumpMemory(orihime_text_document, &output, &size);
+    *request.rout << (char*) output;
+    free(output);
+    
     xmlFreeDoc(orihime_text_document);
 }
 
-void users_id_texts_id_GET_JSON(OrihimeRequest&& request, const std::vector<std::string>& parameters)
+void users_id_texts_id_GET_JSON(OrihimeRequest& request)
 {
     std::unique_ptr<sql::PreparedStatement> statement {connection->prepareStatement(
             R"sql(
@@ -445,14 +444,14 @@ CALL orihime.TextTreeJSON(?, ?);
         children_to_insert.pop();
     }
 
-    rapidjson::OStreamWrapper wrapper {std::cout};
+    rapidjson::OStreamWrapper wrapper {*request.rout};
     rapidjson::Writer<rapidjson::OStreamWrapper> writer {wrapper};
     root_text.Accept(writer);
 } 
 
-void users_id_texts_id_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void users_id_texts_id_PUT(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void users_id_texts_id_POST(OrihimeRequest&& request, const std::vector<std::string>& parameters)
+void users_id_texts_id_HEAD(OrihimeRequest& request) {} 
+void users_id_texts_id_PUT(OrihimeRequest& request) {} 
+void users_id_texts_id_POST(OrihimeRequest& request)
 {
     std::unique_ptr<sql::PreparedStatement> statement {connection->prepareStatement(
             R"sql(
@@ -465,9 +464,9 @@ CALL orihime.add_child_word(?, ?, ?);
     std::unique_ptr<sql::ResultSet> result {statement->executeQuery()};
 
 }
-void users_id_words_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void users_id_words_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void users_id_words_POST(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void users_id_words_id_GET(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void users_id_words_id_HEAD(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
-void users_id_words_id_PUT(OrihimeRequest&& request, const std::vector<std::string>& parameters) {} 
+void users_id_words_GET(OrihimeRequest& request) {} 
+void users_id_words_HEAD(OrihimeRequest& request) {} 
+void users_id_words_POST(OrihimeRequest& request) {} 
+void users_id_words_id_GET(OrihimeRequest& request) {} 
+void users_id_words_id_HEAD(OrihimeRequest& request) {} 
+void users_id_words_id_PUT(OrihimeRequest& request) {} 
