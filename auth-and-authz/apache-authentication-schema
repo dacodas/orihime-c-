@@ -1,0 +1,18 @@
+CREATE DATABASE apache_authentication;
+
+CREATE TABLE user (
+       id INT NOT NULL AUTO_INCREMENT KEY,
+       pass VARCHAR(128) NOT NULL,
+       name VARCHAR(60) NOT NULL
+);
+
+CREATE USER 'apache'@'%' IDENTIFIED BY 'yofuckyoubitch';
+GRANT ALL ON apache_authentication.* TO 'apache'@'%';
+
+INSERT INTO user (name, pass) VALUES ('dacoda','$2y$05$b2TW.3Nsw9b4SGOtvxDFYeiDiPx518Ax34KALOIhVPhZ6o5/JoDii');
+
+-- curl \
+--     -v \
+--     -H 'Content-type: application/x-www-form-urlencoded' \
+--     -d "httpd_username=dacoda&httpd_password=hellothere&httpd_location=/protected" \
+--     localhost/login-handler
