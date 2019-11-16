@@ -1,49 +1,59 @@
 #pragma once 
 
-#include <vector>
+#include <unordered_map>
 #include <string>
-#include <regex>
-#include <tuple>
+#include <functional>
 
 #include <fcgio.h>
 
 #include "OrihimeRequest.h"
 #include "api.h"
 
-using Function = std::function<void(OrihimeRequest&)>;
-using HTTPMethodToFunction = std::vector<std::pair<std::string, Function>>;
-using Dispatch = std::pair<std::regex, HTTPMethodToFunction>;
-
-// Should we also do the URL matching in httpd and then set the
-// variable with the function name?
-
-static std::vector<Dispatch> DispatchTable
-    {};
+// Generated, do not edit
+static std::unordered_map<std::string, std::function<void(OrihimeRequest&)>> dispatch_table {
+    {"sources_GET", sources_GET},
+    {"sources_HEAD", sources_HEAD},
+    {"sources_POST", sources_POST},
+    {"sources_id_GET", sources_id_GET},
+    {"sources_id_HEAD", sources_id_HEAD},
+    {"texts_GET", texts_GET},
+    {"texts_HEAD", texts_HEAD},
+    {"texts_id_GET", texts_id_GET},
+    {"texts_id_HEAD", texts_id_HEAD},
+    {"words_GET", words_GET},
+    {"words_HEAD", words_HEAD},
+    {"words_id_GET", words_id_GET},
+    {"words_id_HEAD", words_id_HEAD},
+    {"users_id_texts_GET", users_id_texts_GET},
+    {"users_id_texts_HEAD", users_id_texts_HEAD},
+    {"users_id_texts_POST", users_id_texts_POST},
+    {"users_id_texts_id_GET", users_id_texts_id_GET},
+    {"users_id_texts_id_HEAD", users_id_texts_id_HEAD},
+    {"users_id_texts_id_PUT", users_id_texts_id_PUT},
+    {"users_id_texts_id_POST", users_id_texts_id_POST},
+    {"users_id_words_GET", users_id_words_GET},
+    {"users_id_words_HEAD", users_id_words_HEAD},
+    {"users_id_words_POST", users_id_words_POST},
+    {"users_id_words_id_GET", users_id_words_id_GET},
+    {"users_id_words_id_HEAD", users_id_words_id_HEAD},
+    {"users_id_words_id_PUT", users_id_words_id_PUT}
+};
 
 void dispatch(OrihimeRequest& request)
 {
-    std::smatch match;
-    std::string path {request.parameter("REQUEST_URI")};
-    std::string method {request.parameter("REQUEST_METHOD")};
+    std::string function {request.parameter("FUNCTION")};
 
-    for ( const Dispatch& dispatch : DispatchTable )
+    auto result = dispatch_table.find(function);
+
+    if ( result != dispatch_table.end() )
     {
-        auto& [regex, http_method_to_function] = dispatch;
-
-        if ( std::regex_match(path, match, regex) )
-        {
-            auto result = std::find_if(
-                http_method_to_function.begin(),
-                http_method_to_function.end(),
-                [&] (const std::pair<std::string, Function>& a) { return a.first == method; }
-                );
-
-            if ( result != http_method_to_function.end() )
-            {
-                result->second(request);
-            }
-
-            break;
-        }
+        result->second(request);
     }
+    else
+    {
+        *request.rout << "Function '" << function.c_str() << "' not found\n";
+    }
+
+    // for ( char **env = request.envp; *env != 0; ++env )
+    //     *request.rout << *env << "\n";
 }

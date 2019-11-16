@@ -2,28 +2,28 @@
 paths:
 - path: "^/sources/$"
   methods: [GET, HEAD, POST]
-- path: "^/sources/(.*?)$"
+- path: "^/sources/(.+)$"
   methods: [GET, HEAD]
   env: [SOURCE]
 - path: "^/texts/$"
   methods: [GET, HEAD]
-- path: "^/texts/(.*?)$"
+- path: "^/texts/(.+)$"
   methods: [GET, HEAD]
   env: [TEXT]
 - path: "^/words/$"
   methods: [GET, HEAD]
-- path: "^/words/(.*?)$"
+- path: "^/words/(.+)$"
   methods: [GET, HEAD]
   env: [WORD]
-- path: "^/users/(.*?)/texts/$"
+- path: "^/users/(.+)/texts/$"
   methods: [GET, HEAD, POST]
   env: [USER]
-- path: "^/users/(.*?)/texts/(.*?)$"
+- path: "^/users/(.+)/texts/(.+)$"
   methods: [GET, HEAD, PUT, POST]
   env: [USER, TEXT]
-- path: "^/users/(.*?)/words/$"
+- path: "^/users/(.+)/words/$"
   methods: [GET, HEAD, POST]
   env: [USER]
-- path: "^/users/(.*?)/words/(.*?)$"
+- path: "^/users/(.+)/words/(.+)$"
   methods: [GET, HEAD, PUT]
   env: [USER, WORD]

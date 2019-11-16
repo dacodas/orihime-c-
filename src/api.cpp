@@ -33,7 +33,7 @@ std::string body_to_string(const OrihimeRequest& request)
 {
     int content_length {std::stoi(request.parameter("CONTENT_LENGTH"))};
     std::string document_string(content_length, ' ');
-    std::cin.read(document_string.data(), content_length);
+    request.rin->read(document_string.data(), content_length);
 
     return document_string;
 }
@@ -42,7 +42,7 @@ rapidjson::Document parse_body(const OrihimeRequest& request)
 { 
     rapidjson::Document document;
     std::string document_string = body_to_string(request);
-    document.Parse(document_string.c_str());
+    document.Parse(document_string.c_str()); 
 
     return document;
 }
@@ -123,6 +123,7 @@ void sources_POST(OrihimeRequest& request)
     if ( not document.IsString() )
     {
         *request.rerr << "That is not a JSON string\n";
+
         return;
     }
 

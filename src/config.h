@@ -30,7 +30,6 @@ void per_thread()
     orihime_sql();
     OrihimeRequest request {};
 
-
     // From fcgi2 threaded.c
     for (;;)
     {

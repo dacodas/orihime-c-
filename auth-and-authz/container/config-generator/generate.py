@@ -9,12 +9,43 @@ class Path():
         self._yaml = _yaml
         self._output = io.StringIO()
 
+    def CFunctions(self):
+
+        base = self.CFunctionBaseFromPath()
+        return ["{}_{}".format(base, method) for method in self._yaml["methods"]]
+
+    def CFunctionBaseFromPath(self):
+
+        return (
+            self._yaml["path"]
+            .replace('(.+)', 'id')
+            .replace('^/', '')
+            .replace('/$', '')
+            .replace('$', '')
+            .replace('/', '_'))
+
+    def SetEnvIfExpr(self):
+
+        output = io.StringIO()
+
+        for method in self._yaml["methods"]:
+
+            output.write('SetEnvIfExpr "%{{REQUEST_URI}} =~ m#{}# && %{{REQUEST_METHOD}} == \'{}\'" FUNCTION={}'
+                               .format(self._yaml["path"],
+                                       method,
+                                       "{}_{}".format(self.CFunctionBaseFromPath(), method)))
+            output.write('\n')
+
+        return output.getvalue()
+
     def SetEnvIf(self):
 
+        output = io.StringIO()
         environment_variables = self._yaml.get("env")
+
         if environment_variables:
 
-            self._output.write('SetEnvIf Request_URI "{}" '.format(self._yaml["path"]))
+            output.write('SetEnvIf Request_URI "{}" '.format(self._yaml["path"]))
 
             envvars_with_index = zip(
                 environment_variables,
@@ -28,27 +59,10 @@ class Path():
 
             joined_envvars = ' '.join(formatted_envvars)
 
-            self._output.write(joined_envvars)
-            self._output.write('\n')
+            output.write(joined_envvars)
+            output.write('\n')
 
-    def RewriteRule(self):
-
-        self._output.write(
-            'RewriteRule "{}" "{}/%{{REQUEST_METHOD}}" [END]'
-            .format(self._yaml["path"],
-                    self._yaml["path"]
-                    .replace('(.*?)', 'id')
-                    .replace('^', '')
-                    .replace('/$', '')
-                    .replace('$', '')))
-
-        self._output.write('\n')
-
-    def rule(self):
-
-        self.SetEnvIf()
-        self.RewriteRule()
-        return self._output.getvalue()
+        return output.getvalue()
 
 class Paths():
 
@@ -65,5 +79,11 @@ class Paths():
 paths = Paths("httpd-conf.yaml")
 
 for path in paths.paths:
+    print(path.SetEnvIfExpr())
 
-    print(path.rule())
+for path in paths.paths:
+    print(path.SetEnvIf())
+
+
+print(',\n'.join([',\n'.join(['{{"{}", {}}}'.format(function, function) for function in path.CFunctions()])
+            for path in paths.paths]))
