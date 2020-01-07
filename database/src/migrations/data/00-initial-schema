@@ -1,0 +1,83 @@
+CREATE DATABASE IF NOT EXISTS orihime
+  CHARACTER SET = 'utf8mb4';
+
+USE orihime;
+
+CREATE TABLE IF NOT EXISTS authentication (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(256) NOT NULL
+    );
+
+CREATE TABLE IF NOT EXISTS user (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(256) NOT NULL,
+    email VARCHAR(256) UNIQUE KEY NOT NULL,
+    authentication INT NOT NULL,
+    hash BINARY(60), -- This can be null if this user is authenticated through a third party 
+    CONSTRAINT `fk_user_authentication`
+               FOREIGN KEY (authentication) REFERENCES authentication (id)
+               ON DELETE RESTRICT
+               ON UPDATE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS source (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(256) UNIQUE KEY
+);
+
+-- This will be for individual sentences, paragraphs, and definitions.
+-- Another table should be created for larger texts that contain
+-- sentences we would like to study. Call this other table
+-- 'longtexts'. If I was reading 人間失格, I could import the entirety
+-- of 人間失格 into 'longtexts', and then parse out individual
+-- sentences and paragraphs for more detailed study. The individual
+-- sentences and paragraphs would be in here. I would consider an
+-- individual article from 読売 and the entirety of the book 人間失格
+-- to be the same 'longtext', whereas this 'text' table is meant for
+-- smaller units of study.
+CREATE TABLE IF NOT EXISTS text (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    source INT NOT NULL,
+    contents VARCHAR(1024) NOT NULL,
+    hash BINARY(16) NOT NULL UNIQUE,
+    -- Let's hash this and make the hash unique instead
+    -- 
+    -- I take this to mean 1024 characters in
+    -- the unicode sense, not in the octet sense.
+    -- Update that to be sure and true.
+    CONSTRAINT `fk_text_source`
+               FOREIGN KEY (source) REFERENCES source (id)
+);
+
+CREATE TABLE IF NOT EXISTS word (
+       id INT AUTO_INCREMENT PRIMARY KEY,
+       word VARCHAR(128) NOT NULL,
+       definition INT NOT NULL,
+       CONSTRAINT `fk_word_text`
+                  FOREIGN KEY (definition) REFERENCES text (id)
+                  ON DELETE CASCADE,
+                  -- I will delete words that are the immediate
+                  -- children of texts, but how will I recurse down
+                  -- and delete all of them, i.e. words that are
+                  -- children of definitions? Something to think about
+       CONSTRAINT `unique_word_definition`
+                  UNIQUE (word, definition)
+);
+
+CREATE TABLE IF NOT EXISTS word_relation (
+       id INT AUTO_INCREMENT PRIMARY KEY,
+       user INT NOT NULL,
+       text INT NOT NULL,
+       word INT NOT NULL, 
+       CONSTRAINT `fk_word_relation_user`
+                  FOREIGN KEY (user) REFERENCES text (id)
+                  ON DELETE CASCADE, 
+       CONSTRAINT `fk_word_relation_text`
+                  FOREIGN KEY (text) REFERENCES text (id)
+                  ON DELETE CASCADE, 
+       CONSTRAINT `fk_word_relation_word`
+                  FOREIGN KEY (word) REFERENCES word (id)
+                  ON DELETE CASCADE, 
+       CONSTRAINT `fk_unique_relation`
+                  UNIQUE (user, text, word)
+);

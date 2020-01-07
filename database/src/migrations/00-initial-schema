@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -euo pipefail
+
+: ${MYSQL_ROOT_PASSWORD:?Define this please}
+: ${ORIHIME_DATA_ROOT_PATH:?Define this please}
+
+mysql --default-character-set=utf8mb4 \
+      -u root "-p$MYSQL_ROOT_PASSWORD" \
+      < ${ORIHIME_DATA_ROOT_PATH}/00-initial-schema 
+
+cat <(echo 'SET NAMES utf8mb4; INSERT INTO source (name) VALUES ') \
+    <( find ${ORIHIME_DATA_ROOT_PATH} -type f -name '00-initial-sources*' -exec cat {} ';' \
+           | sed 's/.*/('\''&'\'')/' \
+           | paste -sd ",") \
+    <(echo ' ON DUPLICATE KEY UPDATE name=name;') \
+    | mysql --default-character-set=utf8mb4 -u root "-p$MYSQL_ROOT_PASSWORD" orihime
+
+mysql --default-character-set=utf8mb4 -u root "-p$MYSQL_ROOT_PASSWORD" orihime < ${ORIHIME_DATA_ROOT_PATH}/00-procedures
+mysql --default-character-set=utf8mb4 -u root "-p$MYSQL_ROOT_PASSWORD" orihime < ${ORIHIME_DATA_ROOT_PATH}/00-text-tree
+
+set +euo pipefail

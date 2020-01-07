@@ -1,0 +1,179 @@
+DROP PROCEDURE IF EXISTS orihime.add_text;
+DROP PROCEDURE IF EXISTS orihime.add_child_word;
+
+delimiter // 
+
+CREATE PROCEDURE orihime.add_text (IN input_json VARCHAR(2048))
+BEGIN
+    -- https://dev.mysql.com/doc/refman/8.0/en/json-table-functions.html
+
+    CREATE TEMPORARY TABLE json
+    AS
+    SELECT * 
+    FROM JSON_TABLE (
+         input_json, 
+         "$"
+         COLUMNS(
+            source VARCHAR(100) PATH "$.source" ERROR ON ERROR ERROR ON EMPTY,
+            contents VARCHAR(1024) PATH "$.contents" ERROR ON ERROR ERROR ON EMPTY
+         )        
+    ) as _json;
+
+    INSERT INTO text (source, contents, hash)
+    SELECT source.id, json.contents, UNHEX(MD5(json.contents))
+    FROM json
+    INNER JOIN source ON source.name = json.source COLLATE utf8mb4_0900_ai_ci;
+
+    IF ROW_COUNT() = 0 THEN
+       SET @message_text = CONCAT('source "', (SELECT source FROM json), '" not found');
+       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @message_text;
+    END IF; 
+END; // 
+
+CREATE PROCEDURE orihime.add_child_word (IN input_json VARCHAR(2048), IN user_name VARCHAR(100), IN text_hash CHAR(32))
+BEGIN
+    CREATE TEMPORARY TABLE json 
+    AS
+    SELECT * FROM
+    JSON_TABLE (
+         -- '{"user": "Strack", "source": "ダコダの普通の生活", "contents": "Okey dokey"}',
+         input_json, 
+         "$"
+         COLUMNS(
+            word VARCHAR(100) PATH "$.word" ERROR ON ERROR ERROR ON EMPTY,
+            definition VARCHAR(1024) PATH "$.definition" ERROR ON ERROR ERROR ON EMPTY,
+            source VARCHAR(100) PATH "$.source" ERROR ON ERROR ERROR ON EMPTY
+         )        
+    ) as _json;
+
+    -- Can we make this into a single query so that it's all or nothing?
+    INSERT INTO text (source, contents, hash)
+    SELECT source.id, json.definition, UNHEX(MD5(json.definition))
+    FROM json
+    INNER JOIN source ON source.name = json.source COLLATE utf8mb4_0900_ai_ci
+    ON DUPLICATE KEY UPDATE hash=hash ;
+
+    INSERT INTO word (word, definition)
+    SELECT json.word, text.id
+    FROM json
+    INNER JOIN text ON hash = UNHEX(MD5(json.definition))
+    ON DUPLICATE KEY UPDATE word.word=json.word;
+
+    INSERT INTO word_relation (user, text, word)
+    SELECT user.id, text.id, word.id
+    FROM json
+    INNER JOIN text ON text.hash = UNHEX(text_hash)
+    INNER JOIN word ON word.word = json.word
+    INNER JOIN user ON user.name = user_name;
+
+END; // 
+
+delimiter // 
+
+DROP PROCEDURE IF EXISTS orihime.TextTreeJSON; //
+
+CREATE PROCEDURE orihime.TextTreeJSON (IN user_name VARCHAR(256), IN text_hash CHAR(32))
+BEGIN
+
+WITH RECURSIVE TextTreeNode(TextID, WordID, DefinitionID, SourceID) AS (
+     SELECT 0 AS TextID, 0 AS WordID, text.id AS DefinitionID, text.source AS SourceID
+     FROM text WHERE text.hash = unhex(text_hash)
+
+     UNION ALL
+
+     SELECT Relation.text, Relation.word, Definition.id, Source.id
+     FROM TextTreeNode
+     INNER JOIN user AS User ON User.name = user_name
+     INNER JOIN word_relation AS Relation ON Relation.text = TextTreeNode.DefinitionID AND Relation.user = User.id
+     INNER JOIN word AS Word ON Word.id = Relation.word
+     INNER JOIN text AS Definition ON Definition.id = Word.definition
+     INNER JOIN source AS Source ON Source.id = Definition.source
+     )
+
+     -- Should I do the JOINs below in the CTE?
+     SELECT "00000000000000000000000000000000" AS hash,
+            JSON_OBJECT(
+                'id', lower(hex(Text.hash)),
+                'contents', Text.contents,
+                'source', source.name
+             )
+         AS children
+     FROM TextTreeNode
+     INNER JOIN text AS Text ON Text.id = TextTreeNode.DefinitionID 
+     INNER JOIN source on TextTreeNode.SourceID = source.id
+     WHERE TextTreeNode.TextID = 0
+     UNION ALL
+     SELECT
+        lower(hex(Parent.hash)) AS hash,
+        JSON_ARRAYAGG(
+            JSON_OBJECT(
+                'id', lower(hex(Definition.hash)),
+                'word', word.word,
+                'definition', Definition.contents,
+                'source', source.name
+            )
+         )
+         AS children
+     FROM TextTreeNode
+     INNER JOIN text AS Parent ON Parent.id = TextTreeNode.TextID
+     INNER JOIN text AS Definition ON Definition.id = TextTreeNode.DefinitionID 
+     INNER JOIN word ON TextTreeNode.WordID = word.id
+     INNER JOIN source on TextTreeNode.SourceID = source.id
+     GROUP BY TextTreeNode.TextID
+     ;
+
+END; //
+
+delimiter ;
+
+delimiter //
+
+DROP PROCEDURE IF EXISTS orihime.TextTree; //
+
+CREATE PROCEDURE orihime.TextTree(IN user_name VARCHAR(256), IN text_hash CHAR(32))
+BEGIN
+
+WITH RECURSIVE TextTreeNode(TextID, WordID, DefinitionID, SourceID) AS (
+     SELECT 0 AS TextID, 0 AS WordID, text.id AS DefinitionID, text.source AS SourceID
+     FROM text WHERE text.hash = unhex(text_hash)
+
+     UNION ALL
+
+     SELECT Relation.text, Relation.word, Definition.id, Source.id
+     FROM TextTreeNode
+     INNER JOIN user AS User ON User.name = user_name
+     INNER JOIN word_relation AS Relation ON Relation.text = TextTreeNode.DefinitionID AND Relation.user = User.id
+     INNER JOIN word AS Word ON Word.id = Relation.word
+     INNER JOIN text AS Definition ON Definition.id = Word.definition
+     INNER JOIN source AS Source ON Source.id = Definition.source
+     )
+
+     -- Should I do the JOINs below in the CTE?
+     SELECT
+        "00000000000000000000000000000000" AS hash,
+        lower(hex(Text.hash)) AS id,
+        NULL AS word,
+        Text.contents AS definition,
+        Source.name AS source
+     FROM TextTreeNode
+     INNER JOIN text AS Text ON Text.id = TextTreeNode.DefinitionID 
+     INNER JOIN source AS Source ON TextTreeNode.SourceID = Source.id
+     WHERE TextTreeNode.TextID = 0
+
+     UNION ALL
+
+     SELECT
+        lower(hex(Parent.hash)) AS hash,
+        lower(hex(Definition.hash)) AS id,
+        word.word AS word,
+        Definition.contents AS definition,
+        source.name AS source
+     FROM TextTreeNode
+     INNER JOIN text AS Parent ON Parent.id = TextTreeNode.TextID
+     INNER JOIN text AS Definition ON Definition.id = TextTreeNode.DefinitionID 
+     INNER JOIN word ON TextTreeNode.WordID = word.id
+     INNER JOIN source on TextTreeNode.SourceID = source.id;
+
+END; //
+
+delimiter ;

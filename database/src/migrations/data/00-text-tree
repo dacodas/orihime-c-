@@ -1,0 +1,56 @@
+-- User password:
+-- htpasswd -bnBC 10 "" Hello | tr -d ':\n'
+
+-- Text hash: 
+-- echo "Hello" | md5sum | awk '{print $1}' | tr -d '\n' | xxd -r -p
+
+
+SET foreign_key_checks = 0;
+
+INSERT INTO authentication (id, name) VALUES (1, "Local account");
+
+INSERT INTO user (id, name, email, authentication, hash)
+       VALUES (1, "Test User", "test.user@gmail.com", 1, BINARY("$2y$10$AyDRFJB2dd5g0kKTnciLbutwXzTFB32VyZ4qA9aGKqYaZJLapt/sa"));
+
+INSERT INTO text (id, source, contents, hash)
+       VALUES
+       (1, 3, "笑わない男、ラグビー稲垣啓太の笑顔が放送され衝撃的過ぎるとざわつく事態に", UNHEX("c97d03d4bd776275f711d1c942c157e2")),
+       (2, 1, "ほう‐そう〔ハウ‐〕【放送】
+の解説
+［名］(スル)特定または不特定の受信者に向けて、無線・有線などの電気通信技術を用いて、映像・音声・文字などの情報を同時的に送信すること。放送法では、「公衆によって直接受信されることを目的とする電気通信の送信」と定義している。「海外に向けて放送する」「FM放送」「車内放送」
+[補説]放送のデジタル化や情報通信ネットワークのブロードバンド化の進展に伴い、インターネットを利用したテレビ放送（IPTV）、携帯端末向けのワンセグ放送、CATV事業者によるインターネット接続サービスなど、通信と放送を融合・連携させたサービスが実現されている。", UNHEX("f1c261c8da30c139f29bf6e73a9c7e3f")),
+       (3, 1, "［動カ五（四）］
+
+１ 騒がしい音を立てる。ざわざわする。ざわめく。「その発言をめぐって聴衆が―・きだした」
+
+２ 落ち着かない状態になる。そわつく。「心が―・く」
+
+「世の中が何となく―・き始めた」〈漱石・夢十夜〉", UNHEX("d8936e422323e007abb392c75b58069a")),
+       (4, 1, "［形］［文］さわが・し［シク］《動詞「さわ（騒）ぐ」の形容詞化》
+１ 盛んに声や物音がしてうるさい。そうぞうしい。やかましい。「教室が―・い」
+
+２ 事件などが起こって世情が落ち着かない。平静・平穏でない。「国内が―・い」
+
+３ 事が多く忙しい。あわただしい。
+
+「何事にあらねど、こと―・しき心地してありふるうちに」〈かげろふ・中〉
+
+４ ごたごたしている。乱雑である。
+
+「書様は色々あるべし。ただ―・しからぬ心づかひありたし」〈三冊子・黒双紙〉
+
+[派生]さわがしげ［形動］さわがしさ［名］", UNHEX("3bd98b391cfe3cd8616a880d6e27b0d1"));
+
+INSERT INTO word (id, word, definition)
+       VALUES
+       (1, "放送", 2), 
+       (2, "ざわつく", 3), 
+       (3, "騒がしい", 4);
+
+INSERT INTO word_relation (id, user, text, word)
+       VALUES
+       (1, 1, 1, 1), 
+       (2, 1, 1, 2), 
+       (3, 1, 3, 3);
+
+SET foreign_key_checks = 1;

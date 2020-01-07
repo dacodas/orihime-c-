@@ -1,0 +1,2 @@
+insert into authentication (name) values ("Dummy authentication");
+insert into user (name, email, authentication) values ("Dacoda Strack", "dacoda.strack@gmail.com", 1);
