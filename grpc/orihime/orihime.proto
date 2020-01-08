@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package orihime;
+
+service Orihime {
+    rpc AddSource(Source) returns (Source) {}
+    rpc TextTree(TextTreeQuery) returns (stream TextTreeNode) {}
+}
+
+// Way to specify the size for this? 
+message TextHash {
+    bytes hash = 1;
+}
+
+message TextTreeQuery {
+    bytes hash = 1;
+    string user = 2;
+}
+
+// For adding, viewing...
+// Should there be a second one that has both of these as optional?
+// Should this be a oneof? 
+message Source {
+    uint64 id = 1;
+    string name = 2;
+}
+
+// Should this be a oneof? Or should the client take care of
+// converting things to id's before sending?
+message TextAny {
+    oneof source {
+        uint64 id = 1;
+        string name = 2;
+    }
+    string content = 3;
+}
+
+message Text {
+    uint64 source_id = 1;
+    string content = 2;
+}
+
+message Word {
+    string word = 1;
+    string definition = 2;
+    uint64 definition_source_id = 3;
+}
+
+message ChildWord {
+    string word = 1;
+    string definition = 2;
+    uint64 definition_source_id = 3;
+    bytes parent_hash = 4;
+    uint64 user_id = 5;
+}
+
+message TextTreeNode {
+    bytes parent_hash = 1;
+    bytes definition_hash = 2;
+    string word = 3;
+    string definition = 4;
+    string source = 5;
+}

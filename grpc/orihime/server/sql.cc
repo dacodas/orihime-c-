@@ -3,7 +3,7 @@
 #include "sql.h"
 
 sql::mysql::MySQL_Driver* driver;
-thread_local std::unique_ptr<sql::Connection> connection;
+std::unique_ptr<sql::Connection> connection;
 
 void orihime_sql()
 {
@@ -11,7 +11,7 @@ void orihime_sql()
     driver = {sql::mysql::get_mysql_driver_instance()};
 
     // TODO: Get more information from the connection for error
-    connection = std::unique_ptr<sql::Connection> (driver->connect("tcp://127.0.0.1:3306", "dacoda", "dacoda"));
+    connection = std::unique_ptr<sql::Connection> (driver->connect("tcp://10.0.2.100:3306", "root", "temporary-test-password"));
     if ( not connection->isValid() )
         throw std::logic_error("Couldn't connect to SQL database");
 

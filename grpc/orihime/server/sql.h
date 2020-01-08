@@ -6,7 +6,8 @@
 #include <cppconn/connection.h>
 #include <cppconn/prepared_statement.h>
 
-extern thread_local std::unique_ptr<sql::Connection> connection;
+// extern thread_local std::unique_ptr<sql::Connection> connection;
+extern std::unique_ptr<sql::Connection> connection;
 
 void orihime_sql();
 

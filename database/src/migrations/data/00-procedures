@@ -2,12 +2,12 @@ delimiter //
 
 DROP PROCEDURE IF EXISTS orihime.TextTree; //
 
-CREATE PROCEDURE orihime.TextTree(IN user_name VARCHAR(256), IN text_hash CHAR(32))
+CREATE PROCEDURE orihime.TextTree(IN user_name VARCHAR(256), IN text_hash BINARY(16))
 BEGIN
 
 WITH RECURSIVE TextTreeNode(TextID, WordID, DefinitionID, SourceID) AS (
      SELECT 0 AS TextID, 0 AS WordID, text.id AS DefinitionID, text.source AS SourceID
-     FROM text WHERE text.hash = unhex(text_hash)
+     FROM text WHERE text.hash = text_hash
 
      UNION ALL
 
