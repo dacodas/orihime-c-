@@ -4,6 +4,9 @@ package orihime;
 
 service Orihime {
     rpc AddSource(Source) returns (Source) {}
+    rpc AddText(Text) returns (Text) {}
+    rpc AddWord(Word) returns (Word) {}
+    rpc AddChildWord(ChildWord) returns (Word) {}
     rpc TextTree(TextTreeQuery) returns (stream TextTreeNode) {}
 }
 

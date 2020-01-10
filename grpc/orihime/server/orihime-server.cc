@@ -23,13 +23,25 @@ public:
         return grpc::Status::OK;
     }
 
+    grpc::Status AddText(grpc::ServerContext* context,
+                         const orihime::Text* request_text,
+                         orihime::Text* response_text) override
+    {
+        orihime::AddText(request_text->source_id(), request_text->content());
+
+        *response_text = *request_text;
+        return grpc::Status::OK;
+    }
+
+                         
+
     grpc::Status TextTree(grpc::ServerContext* context,
                           const orihime::TextTreeQuery* request,
                           grpc::ServerWriter<orihime::TextTreeNode>* stream) override
     {
         std::string hash = request->hash();
         std::string user = request->user();
-        TextTreeSQL(user, hash, stream);
+        orihime::TextTree(user, hash, stream);
 
         return grpc::Status::OK;
     }

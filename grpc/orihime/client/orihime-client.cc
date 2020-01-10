@@ -49,6 +49,21 @@ public:
             return true;
         }
 
+    Status AddText()
+    {
+        ClientContext context;
+        orihime::Text request_text;
+        orihime::Text response_text;
+        Status status; 
+
+        request_text.set_source_id(1);
+        request_text.set_content("Hello there, here is a new text, thanks");
+        status = stub_->AddText(&context, request_text, &response_text);
+
+        std::cout << ( status.ok() ? "AddText Success\n" : "AddText rpc failed\n") ;
+        return status;
+    }
+
     Status TextTree()
     {
         uint8_t hash[] {0xc9, 0x7d, 0x03, 0xd4, 0xbd, 0x77, 0x62, 0x75, 0xf7, 0x11, 0xd1, 0xc9, 0x42, 0xc1, 0x57, 0xe2, 0x00};
@@ -89,8 +104,8 @@ int main(int argc, char** argv) {
   source.set_id(1);
 
   orihime.AddSource(source);
-
-  auto stream = orihime.TextTree();
+  orihime.AddText();
+  orihime.TextTree();
 
   return 0;
 }
