@@ -21,7 +21,7 @@ PROTO_DIRECTORY=build/proto
 SERVER_CLIENT_LDFLAGS=-L/usr/local/lib `pkg-config --libs protobuf grpc++` -pthread -Wl,--no-as-needed -lgrpc++_reflection -Wl,--as-needed -ldl
 SERVER_LDFLAGS=-lpthread -lmysqlcppconn -lmysqlclient
 
-.PHONY: directories proto all
+all: $(BUILD_DIRECTORY)/orihime-server $(BUILD_DIRECTORY)/orihime-client
 
 directories: $(BUILD_DIRECTORY) $(PROTO_DIRECTORY)
 
@@ -91,5 +91,4 @@ $(BUILD_DIRECTORY)/orihime-client: client/orihime-client.cc $(BUILD_DIRECTORY)/o
 		$(PROTO_DIRECTORY)/orihime.pb.o $(PROTO_DIRECTORY)/orihime.grpc.pb.o $(BUILD_DIRECTORY)/orihime-client.o \
 		-o $(BUILD_DIRECTORY)/orihime-client
 
-
-all: $(BUILD_DIRECTORY)/orihime-server $(BUILD_DIRECTORY)/orihime-client
+.PHONY: directories proto all

@@ -1,113 +1,50 @@
-#include <grpc/grpc.h>
-#include <grpcpp/channel.h>
-#include <grpcpp/client_context.h>
-#include <grpcpp/create_channel.h>
-#include <grpcpp/security/credentials.h>
+#include <string>
+#include <unordered_map>
+#include <functional>
 
-#include "orihime.grpc.pb.h"
+#include "grpc.h"
+#include "add.h"
 
-using grpc::Channel;
-using grpc::ClientContext;
-using grpc::ClientReader;
-using grpc::ClientReaderWriter;
-using grpc::ClientWriter;
-using grpc::Status;
-using orihime::Source;
-using orihime::TextHash;
-using orihime::TextTreeNode;
-using orihime::Orihime;
+// Look into `git`s `/usr/libexec` and `github.com/git/git/git.c` as an alternative
+// 
+// struct command_struct commands[] = {
+//     { "add", cmd_add }
+// };
 
-Source MakeSource(std::string name, int id)
+typedef std::unordered_map<std::string, std::function<void(int, char**)>> subcommand_dictionary_value_t;
+typedef std::unordered_map<std::string, subcommand_dictionary_value_t> subcommand_dictionary_t;
+subcommand_dictionary_t subcommand_dictionary
 {
-    Source source;
-    source.set_name(name);
-    source.set_id(id);
-    return source;
-}
-
-class OrihimeClient
-{
-public:
-    OrihimeClient(std::shared_ptr<Channel> channel) : stub_(Orihime::NewStub(channel)) {};
-
-    bool AddSource(const Source& request)
-        {
-            ClientContext context;
-            Source response {};
-            Status status = stub_->AddSource(&context, request, &response);
-
-            if (!status.ok())
-            {
-                std::cout << "AddSource rpc failed." << std::endl;
-                return false;
-            }
-            else
-            {
-                std::cout << "Got back a source with name " << response.name() << " and id " << response.id() << "\n";
-            }
-
-            return true;
-        }
-
-    Status AddText()
     {
-        ClientContext context;
-        orihime::Text request_text;
-        orihime::Text response_text;
-        Status status; 
-
-        request_text.set_source_id(1);
-        request_text.set_content("Hello there, here is a new text, thanks");
-        status = stub_->AddText(&context, request_text, &response_text);
-
-        std::cout << ( status.ok() ? "AddText Success\n" : "AddText rpc failed\n") ;
-        return status;
-    }
-
-    Status TextTree()
-    {
-        uint8_t hash[] {0xc9, 0x7d, 0x03, 0xd4, 0xbd, 0x77, 0x62, 0x75, 0xf7, 0x11, 0xd1, 0xc9, 0x42, 0xc1, 0x57, 0xe2, 0x00};
-        std::string user = "Test user";
-
-        orihime::TextTreeQuery text_tree_query {};
-        text_tree_query.set_hash(reinterpret_cast<char*>(&hash));
-        text_tree_query.set_user(user);
-
-        ClientContext context;
-        std::shared_ptr<ClientReader<TextTreeNode>> stream(stub_->TextTree(&context, text_tree_query));
-
-        TextTreeNode node;
-        while ( stream->Read(&node) )
+        "add",
         {
-            std::cout << "Got back the following TextTreeNode:\n"
-                      << node.parent_hash() << "\n"
-                      << node.definition_hash() << "\n"
-                      << node.word() << "\n"
-                      << node.definition() << "\n"
-                      << node.source() << "\n";
+            {"source", AddSource}, 
+            {"text", AddText},
+            {"child-word", AddChildWord}
         }
-
-        return Status::OK;
     }
-
-    std::unique_ptr<Orihime::Stub> stub_;
 };
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv)
+{
+    client = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
 
-  OrihimeClient orihime(
-      grpc::CreateChannel("localhost:50051",
-                          grpc::InsecureChannelCredentials()));
+    subcommand_dictionary_t::iterator subcommand_match = subcommand_dictionary.find(argv[1]);
+    if ( subcommand_match == subcommand_dictionary.end() )
+    {
+        std::cerr << "Didn't find subcommand '" << argv[1] << "'\n";
+        exit(1);
+    }
 
-  Source source {};
-  source.set_name("Yo wassup");
-  source.set_id(1);
+    subcommand_dictionary_value_t subsubcommand_dictionary = subcommand_match->second;
+    subcommand_dictionary_value_t::iterator subsubcommand_match = subsubcommand_dictionary.find(argv[2]);
+    if ( subsubcommand_match == subsubcommand_dictionary.end() )
+    {
+        std::cerr << "Didn't find valid '" << argv[2] << "' for subcommand '" << argv[1] << "'\n";
+        exit(1);
+    }
 
-  orihime.AddSource(source);
-  orihime.AddText();
-  orihime.TextTree();
+    subsubcommand_match->second(argc, argv);
 
-  return 0;
+    return 0;
 }
-
-
