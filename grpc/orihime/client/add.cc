@@ -81,7 +81,7 @@ void AddChildWord(int argc, char** argv)
          ( so == arguments.end() and s == arguments.end() ) or
          ( wo == arguments.end() and w == arguments.end() ) )
     {
-        std::cerr << "Missing one of --parent, --source, or --word\n";
+        std::cerr << "Missing one of --parent-text, --source, or --word\n";
         exit(1);
     }
 

@@ -61,4 +61,22 @@ CALL orihime.TextTree(?, ?);
         while ( statement->getMoreResults() ) {}
     }
 
+    void AddChildWord(std::string& word, std::string& definition, uint64_t definition_source_id, uint64_t user_id, char* hash)
+    {
+        std::unique_ptr<sql::PreparedStatement> text_insert_statement {connection->prepareStatement(
+                R"sql(
+INSERT INTO word (word, definition) VALUES (?, definition.id)
+SELECT id AS definition.id FROM text WHERE hash = ?;
+)sql")};
+
+
+        AddText(definition_source_id, definition);
+
+
+// INSERT INTO word_relation (user, text, word) VALUES (?, text.id, word.id)
+// SELECT text.id, word.id
+// FROM word 
+// INNER JOIN text ON word.definition = text.id
+// WHERE word.word = ?;
+    }
 }

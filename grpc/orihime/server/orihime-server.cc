@@ -45,6 +45,13 @@ public:
 
         return grpc::Status::OK;
     }
+
+    grpc::Status AddChildWord(grpc::ServerContext* context,
+                              const orihime::ChildWord* request_child_word,
+                              orihime::Word* response_word) override
+    {
+        
+    }
 };
 
 void RunServer()
