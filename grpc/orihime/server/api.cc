@@ -72,7 +72,6 @@ SELECT id AS definition.id FROM text WHERE hash = ?;
 
         AddText(definition_source_id, definition);
 
-
 // INSERT INTO word_relation (user, text, word) VALUES (?, text.id, word.id)
 // SELECT text.id, word.id
 // FROM word 

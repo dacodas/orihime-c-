@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS text (
     id INT AUTO_INCREMENT PRIMARY KEY,
     source INT NOT NULL,
     contents VARCHAR(1024) NOT NULL,
-    hash BINARY(16) NOT NULL UNIQUE,
+    hash BINARY(32) NOT NULL UNIQUE,
     -- Let's hash this and make the hash unique instead
     -- 
     -- I take this to mean 1024 characters in
