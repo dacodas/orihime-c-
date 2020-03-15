@@ -2,7 +2,7 @@ delimiter //
 
 DROP PROCEDURE IF EXISTS orihime.TextTree; //
 
-CREATE PROCEDURE orihime.TextTree(IN user_name VARCHAR(256), IN text_hash BINARY(16))
+CREATE PROCEDURE orihime.TextTree(IN text_hash BINARY(32), IN user_email VARCHAR(256))
 BEGIN
 
 WITH RECURSIVE TextTreeNode(TextID, WordID, DefinitionID, SourceID) AS (
@@ -13,7 +13,7 @@ WITH RECURSIVE TextTreeNode(TextID, WordID, DefinitionID, SourceID) AS (
 
      SELECT Relation.text, Relation.word, Definition.id, Source.id
      FROM TextTreeNode
-     INNER JOIN user AS User ON User.name = user_name
+     INNER JOIN user AS User ON User.email = user_email
      INNER JOIN word_relation AS Relation ON Relation.text = TextTreeNode.DefinitionID AND Relation.user = User.id
      INNER JOIN word AS Word ON Word.id = Relation.word
      INNER JOIN text AS Definition ON Definition.id = Word.definition
@@ -24,7 +24,7 @@ WITH RECURSIVE TextTreeNode(TextID, WordID, DefinitionID, SourceID) AS (
      SELECT
         "00000000000000000000000000000000" AS hash,
         lower(hex(Text.hash)) AS id,
-        NULL AS word,
+        "" AS word,
         Text.contents AS definition,
         Source.name AS source
      FROM TextTreeNode
